@@ -7,12 +7,13 @@ namespace PokerBot2
 {
     public enum WinHandType
     {
-        STRAIGHT_FLUSH = 8, // Royal flush is just the highest straight flush
-        QUAD = 7,
-        FULL_HOUSE = 6,
-        FLUSH = 5,
-        STRAIGHT = 4,
-        THREE_OF_A_KIND = 3,
+        STRAIGHT_FLUSH = 9, // Royal flush is just the highest straight flush
+        QUAD = 8,
+        FULL_HOUSE = 7,
+        FLUSH = 6,
+        STRAIGHT = 5,
+        THREE_OF_A_KIND = 4,
+        TWO_PAIR = 3,
         PAIR = 2,
         HIGH_CARD = 1
     }
@@ -133,6 +134,7 @@ namespace PokerBot2
             Span<int> highestInFlush = stackalloc int[4];
             // Don't need highestInFlush, since it only matters after 5 cards
 
+            //TODO: Handle straight starting with ace
             int diffSuitIndex = 0;
             int curSuit, curRank, rankDiff;
             for (int i=1; i < cards.Length; i++)
@@ -149,7 +151,7 @@ namespace PokerBot2
                 if (rankDiff == 1)
                 {
                     straightCount++;
-                } else
+                } else if (rankDiff != 0)
                 {
                     straightCount = 1;
                 }
@@ -250,12 +252,14 @@ namespace PokerBot2
 
             if (highestSameRank[2] >= 0)
             {
-                return (highestSameRank[3], WinHandType.THREE_OF_A_KIND);
+                return (highestSameRank[2], WinHandType.THREE_OF_A_KIND);
             }
+
+            // TODO: Handle 2 pairs
 
             if (highestSameRank[1] >= 0)
             {
-                return (highestSameRank[2], WinHandType.PAIR);
+                return (highestSameRank[1], WinHandType.PAIR);
             }
 
             return (cards[^1], WinHandType.HIGH_CARD);
