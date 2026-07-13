@@ -248,12 +248,12 @@ namespace PokerBot2
                 return (highestInStraight, WinHandType.STRAIGHT);
             }
 
-            if (highestSameRank[3] >= 0)
+            if (highestSameRank[2] >= 0)
             {
                 return (highestSameRank[3], WinHandType.THREE_OF_A_KIND);
             }
 
-            if (highestSameRank[2] >= 0)
+            if (highestSameRank[1] >= 0)
             {
                 return (highestSameRank[2], WinHandType.PAIR);
             }
