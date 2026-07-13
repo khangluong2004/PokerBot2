@@ -119,9 +119,10 @@ namespace PokerBot2
             int prevSuit = GetSuit(cards[0]);
             int prevRank = GetRank(cards[0]);
 
-            Span<int> highestSameRank = stackalloc int[5];
-            highestSameRank[1] = highestSameRank[2] = highestSameRank[3] = highestSameRank[4] = -1;
+            Span<int> highestSameRank = stackalloc int[4];
+            highestSameRank[0] = highestSameRank[1] = highestSameRank[2] = highestSameRank[3] = -1;
             int sameRankCount = 0;
+            int highestPairNotHighestTrip = -1;
 
             int highestInStraight = -1;
             int straightCount = 1;
@@ -175,12 +176,16 @@ namespace PokerBot2
                 }
                 else
                 {
-                    sameRankCount = 1;
+                    sameRankCount = 0;
                 }
 
                 // Copy the old highest card of [rank] to [rank-1] to still retain
                 // the highest pair that's not a trip to handle full house
-                highestSameRank[sameRankCount - 1] = highestSameRank[sameRankCount];
+                // highestPairNotTrip will remain -1 if there is no pair that's not trip
+                if (sameRankCount == 1)
+                {
+                    highestPairNotHighestTrip = highestSameRank[1];
+                }
                 highestSameRank[sameRankCount] = curRank;
 
                 prevRank = curRank;
@@ -193,16 +198,21 @@ namespace PokerBot2
                 return (highestInStraightFlush, WinHandType.STRAIGHT_FLUSH);
             }
 
-            if (highestSameRank[4] >= 0)
+            if (highestSameRank[3] >= 0)
             {
-                return (highestSameRank[4], WinHandType.QUAD);
+                return (highestSameRank[3], WinHandType.QUAD);
             }
 
             // For full house, encode the pair highest in the last 6 bits, and the trip highest in the next 6 bits
             // The highest pair that's not a trip is stored in highestSameRank[1]
-            if (highestSameRank[3] >= 0 && highestSameRank[1] >= 0)
+            if (highestPairNotHighestTrip == highestSameRank[2])
             {
-                return ((highestSameRank[3] << 6) + highestSameRank[1], WinHandType.FULL_HOUSE);
+                highestPairNotHighestTrip = highestSameRank[1];
+            }
+
+            if (highestSameRank[2] >= 0 && highestPairNotHighestTrip >= 0)
+            {
+                return ((highestSameRank[2] << 6) + highestPairNotHighestTrip, WinHandType.FULL_HOUSE);
             }
 
             // Flush. Manual loop unroll :0 Fuck the jit
