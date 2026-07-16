@@ -110,8 +110,10 @@ namespace PokerBot2
             return Deck[CurDealtCard++];
         }
 
-        // input = any hands (max 7 cards, min 1 card)
-        // Return (highest rank, win hand type)
+        // input = 7 cards (if not enough, add negative filler cards, starting from -4 downward,
+        // avoid confusion with 2)
+        // Return (ordering value, win hand type), where the ordering value
+        // is used to sort the win hand of the same type (higher = better, equal = same hand)
         // Note: input will be sort in place
         public static (int, WinHandType) EvalHand(Span<int> cards)
         {
@@ -119,11 +121,12 @@ namespace PokerBot2
             cards.Sort();
             int prevSuit = GetSuit(cards[0]);
             int prevRank = GetRank(cards[0]);
+            int orderingVal;
 
             Span<int> highestSameRank = stackalloc int[4];
             highestSameRank[0] = highestSameRank[1] = highestSameRank[2] = highestSameRank[3] = -1;
             int sameRankCount = 0;
-            int highestPairNotHighestTrip = -1;
+            int highestPairNotHighestTrip = -1; // Store the second highest pair
 
             int highestInStraight = -1;
             int straightCount = 1;
@@ -139,6 +142,12 @@ namespace PokerBot2
             int curSuit, curRank, rankDiff;
             for (int i=1; i < cards.Length; i++)
             {
+                // Skip filler cards
+                if (cards[i] < 0)
+                {
+                    continue;
+                }
+
                 curSuit = GetSuit(cards[i]);
                 curRank = GetRank(cards[i]);
 
@@ -206,18 +215,17 @@ namespace PokerBot2
             }
 
             // For full house, encode the pair highest in the last 6 bits, and the trip highest in the next 6 bits
-            // The highest pair that's not a trip is stored in highestSameRank[1]
-            if (highestPairNotHighestTrip == highestSameRank[2])
-            {
-                highestPairNotHighestTrip = highestSameRank[1];
-            }
-
             if (highestSameRank[2] >= 0 && highestPairNotHighestTrip >= 0)
             {
+                if (highestPairNotHighestTrip == highestSameRank[2])
+                {
+                    highestPairNotHighestTrip = highestSameRank[1];
+                }
                 return ((highestSameRank[2] << 6) + highestPairNotHighestTrip, WinHandType.FULL_HOUSE);
             }
 
             // Flush. Manual loop unroll :0 Fuck the jit
+            // TODO: Need to encode all 5 cards, not just highest for flush
             int maxFlush = -1;
             if (flushCount[0] >= 5 && highestInFlush[0] > maxFlush)
             {
@@ -250,16 +258,103 @@ namespace PokerBot2
                 return (highestInStraight, WinHandType.STRAIGHT);
             }
 
+            // Trip
             if (highestSameRank[2] >= 0)
             {
-                return (highestSameRank[2], WinHandType.THREE_OF_A_KIND);
-            }
+                var tripCard = highestSameRank[2];
+                orderingVal = (tripCard << 12);
+                // Grab the other 2 highest card
+                var rankCheck = GetRank(cards[^1]);
+                if (rankCheck != tripCard)
+                {
+                    orderingVal += (rankCheck << 6);
+                } else
+                {
+                    // Top card is trip, so grab the next 2
+                    return (orderingVal 
+                        + (GetRank(cards[^4]) << 6)
+                        + GetRank(cards[^5])
+                        , WinHandType.THREE_OF_A_KIND);
+                }
 
-            // TODO: Handle 2 pairs
+                rankCheck = GetRank(cards[^2]);
+                if (rankCheck != tripCard)
+                {
+                    orderingVal += rankCheck;
+                } else
+                {
+                    // Second card is trip, so grab the next one
+                    return (orderingVal
+                        + GetRank(cards[^5])
+                        , WinHandType.THREE_OF_A_KIND)
+                }
+
+                return (orderingVal, WinHandType.THREE_OF_A_KIND);
+            }
 
             if (highestSameRank[1] >= 0)
             {
-                return (highestSameRank[1], WinHandType.PAIR);
+                int cardRank;
+                if (highestPairNotHighestTrip >= 0)
+                {
+                    orderingVal = (highestSameRank[1] << 12) + (highestPairNotHighestTrip << 6);
+                    cardRank = GetRank(cards[^1]);
+                    if (cardRank != highestSameRank[1])
+                    {
+                        return (orderingVal + cardRank, WinHandType.TWO_PAIR);
+                    }
+
+                    // Highest 2 cards = highest pair, so check second pair
+                    cardRank = GetRank(cards[^3]);
+                    if (cardRank != highestPairNotHighestTrip)
+                    {
+                        return (orderingVal + cardRank, WinHandType.TWO_PAIR);
+                    }
+
+                    // If the other 2 matches, then the fifth card is the highest card
+                    return (orderingVal + GetRank(cards[^5]), WinHandType.TWO_PAIR);
+                    
+                }
+
+                // Pair
+                var pairRank = highestSameRank[1];
+                orderingVal = (pairRank << 18);
+                cardRank = GetRank(cards[^1]);
+                if (cardRank != pairRank)
+                {
+                    orderingVal += (cardRank << 12);
+                } else
+                {
+                    // Top card is already top pair, so grab the next 3
+                    return (orderingVal 
+                        + (GetRank(cards[^3]) << 12)
+                        + (GetRank(cards[^4]) << 6)
+                        + GetRank(cards[^5])
+                        , WinHandType.PAIR);
+                }
+
+                cardRank = GetRank(cards[^2]);
+                if (cardRank != pairRank)
+                {
+                    orderingVal += (cardRank << 6);
+                }
+                else
+                {
+                    // Second card is top pair, grab the next 2
+                    return (orderingVal
+                        + (GetRank(cards[^4]) << 6)
+                        + GetRank(cards[^5])
+                        , WinHandType.PAIR);
+                }
+
+                cardRank = GetRank(cards[^3]);
+                if (cardRank != pairRank)
+                {
+                    return (orderingVal + cardRank, WinHandType.PAIR);
+                }
+
+                // The third top card is the pair, so grab the fourth one
+                return (orderingVal + GetRank(cards[^4]), WinHandType.PAIR);
             }
 
             return (cards[^1], WinHandType.HIGH_CARD);
