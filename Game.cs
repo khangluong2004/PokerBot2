@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace PokerBot2
 {
@@ -117,21 +115,32 @@ namespace PokerBot2
         // Note: input will be sort in place
         public static (int, WinHandType) EvalHand(Span<int> cards)
         {
+            Debug.Assert(cards.Length > 7);
             // Sorted by rank, due to the ordering defined
             cards.Sort();
+
             int prevSuit = GetSuit(cards[0]);
             int prevRank = GetRank(cards[0]);
             int orderingVal;
 
+            // Trip + Quad + Pair
             Span<int> highestSameRank = stackalloc int[4];
             highestSameRank[0] = highestSameRank[1] = highestSameRank[2] = highestSameRank[3] = -1;
             int sameRankCount = 0;
             int highestPairNotHighestTrip = -1; // Store the second highest pair
 
+            // Straight
             int highestInStraight = -1;
             int straightCount = 1;
 
             // Straight flush - Per suit computation
+            Span<int> highestInStraightFlush = stackalloc int[4];
+            highestInStraightFlush[0]
+                = highestInStraightFlush[1]
+                = highestInStraightFlush[2]
+                = highestInStraightFlush[3]
+                = -1;
+
             Span<int> highestSoFarInStraightFlush = stackalloc int[4];
             highestSoFarInStraightFlush[0]
                 = highestSoFarInStraightFlush[1]
@@ -139,16 +148,81 @@ namespace PokerBot2
                 = highestSoFarInStraightFlush[3]
                 = -1;
             highestSoFarInStraightFlush[prevSuit] = prevRank;
-            Span<int> highestInStraightFlush = stackalloc int[4];
-            highestInStraightFlush[0]
-                = highestInStraightFlush[1]
-                = highestInStraightFlush[2]
-                = highestInStraightFlush[3]
-                = -1;
+
             Span<int> countStraightFlush = stackalloc int[4];
             countStraightFlush[prevSuit] = 1;
             int rankDiffStraightFlush;
 
+            // Count the ace before hand to deal with the straight wrap around
+            Span<bool> hasAceSuit = stackalloc bool[4];
+            bool hasAce = false;
+            int lastCardRank = GetRank(cards[^1]);
+            if (lastCardRank == 12)
+            {
+                hasAceSuit[GetSuit(cards[^1])] = true;
+                hasAce = true;
+                if (GetRank(cards[^2]) == 12)
+                {
+                    hasAceSuit[GetSuit(cards[^2])] = true;
+                    if (GetRank(cards[^3]) == 12)
+                    {
+                        hasAceSuit[GetSuit(cards[^3])] = true;
+                        if (GetRank(cards[^4]) == 12)
+                        {
+                            hasAceSuit[GetSuit(cards[^4])] = true;
+                        }
+                    }
+                }
+            }
+
+            // Handle the first 4 cards if they are 2, to handle wrap around for straight + straight flush
+            // Straight
+            if (prevRank == 0 && hasAce)
+            {
+                straightCount = 2;
+            }
+
+            // Straight flush
+            if (prevRank == 0)
+            {
+                if (hasAceSuit[prevSuit])
+                {
+                    countStraightFlush[prevSuit] = 2;
+                    // highestSoFar already sets when init
+                }
+                if (GetRank(cards[1]) == 0)
+                {
+                    var suit = GetSuit(cards[1]);
+                    if (hasAceSuit[suit])
+                    {
+                        countStraightFlush[suit] = 2;
+                        highestSoFarInStraightFlush[suit] = 0;
+                    }
+
+                    if (GetRank(cards[2]) == 0)
+                    {
+                        suit = GetSuit(cards[2]);
+                        if (hasAceSuit[suit])
+                        {
+                            countStraightFlush[suit] = 2;
+                            highestSoFarInStraightFlush[suit] = 0;
+                        }
+
+                        if (GetRank(cards[3]) == 0)
+                        {
+                            suit = GetSuit(cards[3]);
+                            if (hasAceSuit[suit])
+                            {
+                                countStraightFlush[suit] = 2;
+                                highestSoFarInStraightFlush[suit] = 0;
+                            }
+
+                        }
+                    }
+                }
+            }
+
+            // Flush
             Span<int> flushCount = stackalloc int[4];
             flushCount[prevSuit] = 1;
             Span<int> orderingValueFlush = stackalloc int[4]; // Store the ordering value of flush
@@ -169,24 +243,18 @@ namespace PokerBot2
 
                 // Straight flush
                 // Like straight, but for each suit
-                rankDiffStraightFlush = highestSoFarInStraightFlush[curSuit] - curRank;
+                rankDiffStraightFlush = curRank - highestSoFarInStraightFlush[curSuit];
                 if (rankDiffStraightFlush == 1)
                 {
                     countStraightFlush[curSuit]++;
-                    highestSoFarInStraightFlush[curSuit] = curRank;
                     if (countStraightFlush[curSuit] >= 5)
                     {
                         highestInStraightFlush[curSuit] = curRank;
                     }
                 } else if (rankDiffStraightFlush != 0) {
                     countStraightFlush[curSuit] = 1;
-                    // Handle straight start with ace then 2
-                    if (highestSoFarInStraightFlush[curSuit] == 12 && curRank == 0)
-                    {
-                        countStraightFlush[curSuit] = 2;
-                    }
                 }
-
+                highestSoFarInStraightFlush[curSuit] = curRank;
 
                 // Flush
                 flushCount[curSuit] += 1;
@@ -205,11 +273,6 @@ namespace PokerBot2
                 } else if (rankDiff != 0)
                 {
                     straightCount = 1;
-                    // Handle straight starting from ace
-                    if (prevRank == 12 && curRank == 0)
-                    {
-                        straightCount = 2;
-                    }
                 }
 
                 // Pair + Trip + Quad
@@ -259,8 +322,14 @@ namespace PokerBot2
             }
 
             if (highestSameRank[3] >= 0)
-            {
-                return (highestSameRank[3], WinHandType.QUAD);
+            { 
+                if (highestSameRank[3] == lastCardRank)
+                {
+                    return ((highestSameRank[3] << 6) + GetRank(cards[^5]), WinHandType.QUAD);
+                } else
+                {
+                    return ((highestSameRank[3] << 6) + GetRank(cards[^1]), WinHandType.QUAD);
+                }
             }
 
             // For full house, encode the pair highest in the last 6 bits, and the trip highest in the next 6 bits
