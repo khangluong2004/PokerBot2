@@ -134,10 +134,9 @@ namespace PokerBot2
 
             Span<int> flushCount = stackalloc int[4];
             flushCount[prevSuit] = 1;
-            Span<int> highestInFlush = stackalloc int[4];
-            // Don't need highestInFlush, since it only matters after 5 cards
+            Span<int> orderingValueFlush = stackalloc int[4]; // Store the ordering value of flush
+            orderingValueFlush[prevSuit] = prevRank;
 
-            //TODO: Handle straight starting with ace
             int diffSuitIndex = 0;
             int curSuit, curRank, rankDiff;
             for (int i=1; i < cards.Length; i++)
@@ -153,7 +152,7 @@ namespace PokerBot2
 
                 // Flush
                 flushCount[curSuit] += 1;
-                highestInFlush[curSuit] = curRank;
+                orderingValueFlush[curSuit] += curRank << (6 * flushCount[curSuit]);
 
                 // Straight
                 rankDiff = curRank - prevRank;
@@ -163,10 +162,15 @@ namespace PokerBot2
                 } else if (rankDiff != 0)
                 {
                     straightCount = 1;
+                    // Handle straight starting from ace
+                    if (prevRank == 13 && curRank == 0)
+                    {
+                        straightCount = 0;
+                    }
                 }
 
-                // Straight flush + Straight
-                if (curSuit != prevSuit)
+                    // Straight flush + Straight
+                    if (curSuit != prevSuit)
                 {
                     diffSuitIndex = i;
                 }
@@ -225,26 +229,25 @@ namespace PokerBot2
             }
 
             // Flush. Manual loop unroll :0 Fuck the jit
-            // TODO: Need to encode all 5 cards, not just highest for flush
             int maxFlush = -1;
-            if (flushCount[0] >= 5 && highestInFlush[0] > maxFlush)
+            if (flushCount[0] >= 5 && orderingValueFlush[0] > maxFlush)
             {
-                maxFlush = highestInFlush[0];
+                maxFlush = orderingValueFlush[0];
             }
 
-            if (flushCount[1] >= 5 && highestInFlush[1] > maxFlush)
+            if (flushCount[1] >= 5 && orderingValueFlush[1] > maxFlush)
             {
-                maxFlush = highestInFlush[1];
+                maxFlush = orderingValueFlush[1];
             }
 
-            if (flushCount[2] >= 5 && highestInFlush[2] > maxFlush)
+            if (flushCount[2] >= 5 && orderingValueFlush[2] > maxFlush)
             {
-                maxFlush = highestInFlush[2];
+                maxFlush = orderingValueFlush[2];
             }
 
-            if (flushCount[3] >= 5 && highestInFlush[3] > maxFlush)
+            if (flushCount[3] >= 5 && orderingValueFlush[3] > maxFlush)
             {
-                maxFlush = highestInFlush[3];
+                maxFlush = orderingValueFlush[3];
             }
 
             if (maxFlush >= 0)
