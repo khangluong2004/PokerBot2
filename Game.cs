@@ -266,7 +266,7 @@ namespace PokerBot2
             // For full house, encode the pair highest in the last 6 bits, and the trip highest in the next 6 bits
             if (highestSameRank[2] >= 0 && highestPairNotHighestTrip >= 0)
             {
-                if (highestPairNotHighestTrip == highestSameRank[2])
+                if (highestSameRank[1] != highestSameRank[2])
                 {
                     highestPairNotHighestTrip = highestSameRank[1];
                 }
