@@ -130,14 +130,31 @@ namespace PokerBot2
 
             int highestInStraight = -1;
             int straightCount = 1;
-            int highestInStraightFlush = -1;
+
+            // Straight flush - Per suit computation
+            Span<int> highestSoFarInStraightFlush = stackalloc int[4];
+            highestSoFarInStraightFlush[0]
+                = highestSoFarInStraightFlush[1]
+                = highestSoFarInStraightFlush[2]
+                = highestSoFarInStraightFlush[3]
+                = -1;
+            highestSoFarInStraightFlush[prevSuit] = prevRank;
+            Span<int> highestInStraightFlush = stackalloc int[4];
+            highestInStraightFlush[0]
+                = highestInStraightFlush[1]
+                = highestInStraightFlush[2]
+                = highestInStraightFlush[3]
+                = -1;
+            Span<int> countStraightFlush = stackalloc int[4];
+            countStraightFlush[prevSuit] = 1;
+            int rankDiffStraightFlush;
 
             Span<int> flushCount = stackalloc int[4];
             flushCount[prevSuit] = 1;
             Span<int> orderingValueFlush = stackalloc int[4]; // Store the ordering value of flush
             orderingValueFlush[prevSuit] = prevRank;
 
-            int diffSuitIndex = 0;
+            
             int curSuit, curRank, rankDiff;
             for (int i=1; i < cards.Length; i++)
             {
@@ -150,37 +167,48 @@ namespace PokerBot2
                 curSuit = GetSuit(cards[i]);
                 curRank = GetRank(cards[i]);
 
+                // Straight flush
+                // Like straight, but for each suit
+                rankDiffStraightFlush = highestSoFarInStraightFlush[curSuit] - curRank;
+                if (rankDiffStraightFlush == 1)
+                {
+                    countStraightFlush[curSuit]++;
+                    highestSoFarInStraightFlush[curSuit] = curRank;
+                    if (countStraightFlush[curSuit] >= 5)
+                    {
+                        highestInStraightFlush[curSuit] = curRank;
+                    }
+                } else if (rankDiffStraightFlush != 0) {
+                    countStraightFlush[curSuit] = 1;
+                    // Handle straight start with ace then 2
+                    if (highestSoFarInStraightFlush[curSuit] == 12 && curRank == 0)
+                    {
+                        countStraightFlush[curSuit] = 2;
+                    }
+                }
+
+
                 // Flush
                 flushCount[curSuit] += 1;
-                orderingValueFlush[curSuit] += curRank << (6 * flushCount[curSuit]);
+                orderingValueFlush[curSuit] += curRank << (6 * (flushCount[curSuit] - 1));
+                
 
                 // Straight
                 rankDiff = curRank - prevRank;
                 if (rankDiff == 1)
                 {
                     straightCount++;
+                    if (straightCount >= 5)
+                    {
+                        highestInStraight = curRank;
+                    }
                 } else if (rankDiff != 0)
                 {
                     straightCount = 1;
                     // Handle straight starting from ace
-                    if (prevRank == 13 && curRank == 0)
+                    if (prevRank == 12 && curRank == 0)
                     {
-                        straightCount = 0;
-                    }
-                }
-
-                    // Straight flush + Straight
-                    if (curSuit != prevSuit)
-                {
-                    diffSuitIndex = i;
-                }
-
-                if (straightCount >= 5)
-                {
-                    highestInStraight = curRank;
-                    if (i - diffSuitIndex + 1 >= 5)
-                    {
-                        highestInStraightFlush = curRank;
+                        straightCount = 2;
                     }
                 }
 
@@ -208,9 +236,26 @@ namespace PokerBot2
             }
 
             // Return from top hand to bottom
-            if (highestInStraightFlush > 0)
+            // Straight flush manual unroll
+            int maxStraightFlush = highestInStraightFlush[0];
+            if (highestInStraightFlush[1] > maxStraightFlush)
             {
-                return (highestInStraightFlush, WinHandType.STRAIGHT_FLUSH);
+                maxStraightFlush = highestInStraightFlush[1];
+            }
+
+            if (highestInStraightFlush[2] > maxStraightFlush)
+            {
+                maxStraightFlush = highestInStraightFlush[2];
+            }
+
+            if (highestInStraightFlush[3] > maxStraightFlush)
+            {
+                maxStraightFlush = highestInStraightFlush[3];
+            }
+
+            if (maxStraightFlush > 0)
+            {
+                return (maxStraightFlush, WinHandType.STRAIGHT_FLUSH);
             }
 
             if (highestSameRank[3] >= 0)
@@ -289,7 +334,7 @@ namespace PokerBot2
                     // Second card is trip, so grab the next one
                     return (orderingVal
                         + GetRank(cards[^5])
-                        , WinHandType.THREE_OF_A_KIND)
+                        , WinHandType.THREE_OF_A_KIND);
                 }
 
                 return (orderingVal, WinHandType.THREE_OF_A_KIND);
